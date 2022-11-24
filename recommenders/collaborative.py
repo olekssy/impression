@@ -3,26 +3,6 @@
 import numpy as np
 
 
-class Similarity:
-    """ Class provides functionals for estimating similarity score. """
-
-    @classmethod
-    def cosine(cls, user_1: np.ndarray, user_2: np.ndarray) -> float:
-        """ Calculates cosine similarity of two users from mutual ratings. """
-
-        # edge-case: l2_norm is zero
-        l2_prod = np.linalg.norm(user_1) * np.linalg.norm(user_2)
-        if round(l2_prod):
-            return user_1 @ user_2 / l2_prod
-        return 0.0
-
-    @classmethod
-    def pearson(cls, user_1: np.ndarray, user_2: np.ndarray) -> float:
-        """ Calculates Pearson correlation of two users from mutual ratings. """
-
-        return cls.cosine(user_1 - np.mean(user_1), user_2 - np.mean(user_2))
-
-
 class UserMemoryModel:
     """ Class for predicting item ratings with the user-based method.
 
@@ -54,7 +34,12 @@ class UserMemoryModel:
         top_items: list[int] = umm.top_k_items(user_id=2, k=3)
     """
 
-    def __init__(self, rating_matrix: np.ndarray) -> None:
+    def __init__(self,
+                 rating_matrix: np.ndarray,
+                 num_top_peers: int = 0) -> None:
+        # number of top similar peers to use
+        # for rating prediction. Use all available if zero.
+        self.num_top_peers = num_top_peers
         # m x n (immutable) observed rating matrix
         self.rating_matrix = rating_matrix
 
@@ -70,65 +55,97 @@ class UserMemoryModel:
         np.fill_diagonal(self.similarity_scores, 1.0)
 
         # mean observed user ratings for mean-centering
-        self.rating_mus: np.ndarray = np.nanmean(self.rating_matrix, 1)
+        self.mus: np.ndarray = np.nanmean(self.rating_matrix, 1)
+
+    def _cosine(self, user_1: np.ndarray, user_2: np.ndarray) -> float:
+        """ Calculates cosine similarity of two users from mutual ratings.
+            Method calculates Pearson correlation similarity score, if passed
+            mean-centered rating vectors. """
+
+        # edge-case: l2_norm is zero
+        l2_prod = np.linalg.norm(user_1) * np.linalg.norm(user_2)
+        if round(l2_prod):
+            return user_1 @ user_2 / l2_prod
+        return 0
 
     def predict(self, user_id: int, item_id: int) -> float:
-        """ Predicts rating of the target item for a user. """
+        """Predicts rating of the target item for a user.
+
+        Args:
+            user_id (int): index of the target user.
+            item_id (int): index of the target item.
+
+        Returns:
+            float: predicted item rating.
+        """
 
         # get cached rating, if exists
-        user_item_rating: float = self.cached_ratings[user_id, item_id]
-        if not np.isnan(user_item_rating):
-            return user_item_rating
+        pred_r: float = self.cached_ratings[user_id, item_id]
+        if not np.isnan(pred_r):
+            return pred_r
 
-        # predict missing peer similarity scores from observed mutual ratings
-        user_ratings: np.ndarray = self.rating_matrix[user_id]
-        observed_user_ratings: np.ndarray = ~np.isnan(user_ratings)
-        missing_sim_ids: np.ndarray = np.argwhere(
-            np.isnan(self.similarity_scores[user_id])).flatten()
+        user_sims = self.similarity_scores[user_id]
+        item_ratings = self.rating_matrix[:, item_id]
+        user_ratings = self.rating_matrix[user_id]
+
+        # calculate sim score for peers with observed ratings for item_id
+        missing_rating_ids = np.argwhere(np.isnan(item_ratings)).flatten()
+        missing_sim_ids = np.argwhere(np.isnan(user_sims)).flatten()
+        missing_sim_ids = np.setdiff1d(missing_sim_ids, missing_rating_ids)
+
+        user_ratings = np.delete(user_ratings, item_id)
+        observed_user_map = ~np.isnan(user_ratings)
 
         for peer_id in missing_sim_ids:
-            peer_ratings: np.ndarray = self.rating_matrix[peer_id]
-            observed_peer_ratings: np.ndarray = ~np.isnan(peer_ratings)
-            observed_mutual_ratings: np.ndarray = (observed_user_ratings &
-                                                   observed_peer_ratings)
+            peer_ratings = self.rating_matrix[peer_id]
+            peer_ratings = np.delete(peer_ratings, item_id)
+            observed_peer_map = ~np.isnan(peer_ratings)
+            observed_mutual_map = (observed_user_map & observed_peer_map)
 
             # at least one observed mutual rating required to estimate sim score
             sim_score: float = 0.0
-            if user_ratings[observed_mutual_ratings].size:
-                sim_score = Similarity.pearson(
-                    user_ratings[observed_mutual_ratings],
-                    peer_ratings[observed_mutual_ratings])
-            self.similarity_scores[user_id, peer_id] = round(sim_score, 2)
+            if user_ratings[observed_mutual_map].size:
+                sim_score = self._cosine(
+                    user_ratings[observed_mutual_map] - self.mus[user_id],
+                    peer_ratings[observed_mutual_map] - self.mus[peer_id])
+            self.similarity_scores[user_id, peer_id] = sim_score
 
-        # predict item rating from peers as a sum of observed peer ratings for
-        # the target item weighted by similarity score, if combination of peer
-        # similarity and peer rating exists
-        peer_sim = np.nan_to_num(self.similarity_scores[user_id])
+        peer_sim = np.nan_to_num(user_sims)
         peer_sim = np.delete(peer_sim, user_id)
-        peer_sim_sum: float = sum(peer_sim)
+
+        # select top-m similarity peers
+        top_ids = np.arange(peer_sim.size)
+        if self.num_top_peers > 0 and self.num_top_peers < peer_sim.size - 1:
+            top_ids = np.argsort(-peer_sim)[:self.num_top_peers]
+            peer_sim = np.take(peer_sim, top_ids)
 
         # similar peers do not exist
-        if not round(peer_sim_sum):
+        peer_sim_sum: float = sum(peer_sim)
+        if abs(peer_sim_sum) < 0.2:
             return np.nan
 
-        peer_ratings = self.rating_matrix[:, item_id]
-        peer_ratings = np.delete(peer_ratings, user_id)
+        # select peer ratings
+        peer_ratings = np.delete(item_ratings, user_id)
+        peer_ratings = np.take(peer_ratings, top_ids)
 
-        # at least one valid similarity-rating pair required for prediction
+        # at least one valid simi-rating pair required to predict rating
         similarity_exists = np.where(peer_sim != 0, True, False)
         rating_exists = ~np.isnan(peer_ratings)
         sr_pair_exists: bool = (similarity_exists & rating_exists).any()
 
+        # predict item rating for user from select peers similarity and
+        # observed peer ratings for the item weighted by similarity score
         if sr_pair_exists:
-            peer_mus = np.delete(self.rating_mus, user_id)
+            peer_mus = np.delete(self.mus, user_id)
+            peer_mus = np.take(peer_mus, top_ids)
             peer_ratings = np.nan_to_num(peer_ratings - peer_mus)
-            user_item_rating = (self.rating_mus[user_id] +
-                                peer_sim @ peer_ratings / peer_sim_sum)
+            pred_r = (self.mus[user_id] +
+                      peer_sim @ peer_ratings / peer_sim_sum)
 
         # cache predicted rating
-        self.cached_ratings[user_id, item_id] = user_item_rating
+        self.cached_ratings[user_id, item_id] = pred_r
 
-        return user_item_rating
+        return pred_r
 
     def complete_rating_matrix(self) -> np.ndarray:
         """ Fills missing ratings in the rating matrix. """
