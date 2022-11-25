@@ -18,11 +18,9 @@ A neighborhood-based collaborative filtering method for predicting the target it
 * Eliminates prediction bias by mean-centering observed peer ratings.
 
 ```python
->>> import numpy as np
 >>> from recommenders.collaborative import UserMemoryModel
 
->>> # define m_users x n_items rating matrix
->>> # with observed discrete ratings from range [-2:2]
+>>> # m_users x n_items observed ratings matrix
 >>> rating_matrix
 array([[nan,  2.,  0., nan],
        [-2., nan, nan,  0.],
@@ -37,16 +35,16 @@ array([[nan,  2.,  0., nan],
 
 >>> # predict top-3 rated items for user(2)
 >>> umm.top_k_items(user_id=2, k=3)
-[0, 3, 2]
+[0, 3, 1]
 
 >>> # predict missing ratings for all users
->>> umm.complete_rating_matrix().round(1)
+>>> umm.complete_rating_matrix()
 array([[ 2. ,  2. ,  0. ,  nan],
-       [-2. , -1.5, -1.5,  0. ],
-       [ 1. , -1. , -0.2,  0.8],
-       [ 1. ,  0. , -1. , -2.4]])
+       [-2. , -1.5, -2. ,  0. ],
+       [ 1. , -1. , -1. ,  1. ],
+       [ 1. ,  0. , -1. ,  1. ]])
 
->>> # estimated similarity scores among users
+>>> # estimated similarity scores of users
 >>> umm.similarity_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
        [ 0. ,  1. , -1. , -1. ],

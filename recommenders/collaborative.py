@@ -10,9 +10,9 @@ class UserMemoryModel:
         predict(user_id: int, item_id: int) (float): Predicts rating of
             the target item for a user.
         top_k_items(user_id: int, k: int = 1) (list[int]): Predicts top-k items
-            for an user.
-        complete_rating_matrix() (np.ndarray): Fills missing ratings in the
-            rating matrix.
+            for a user.
+        complete_rating_matrix() (np.ndarray): Predicts missing ratings for all
+            users.
 
     Typical usage:
         rating_matrix = np.array([
@@ -31,7 +31,7 @@ class UserMemoryModel:
         print(umm.top_k_items(user_id=2, k=3))
 
         # predict missing ratings for all users
-        print(umm.complete_rating_matrix().round(1))
+        print(umm.complete_rating_matrix())
 
         # estimated similarity matrix
         print(umm.similarity_scores.round(1))
@@ -58,7 +58,15 @@ class UserMemoryModel:
     def _cosine(self, user_1: np.ndarray, user_2: np.ndarray) -> float:
         """ Calculates cosine similarity of two users from mutual ratings.
             Method calculates Pearson correlation similarity score, if passed
-            mean-centered rating vectors. """
+            mean-centered rating vectors.
+
+        Args:
+            user_1 (np.ndarray): mutualy observed ratings of user/peer.
+            user_2 (np.ndarray): mutualy observed ratings of user/peer.
+
+        Returns:
+            float: cosine similarity (Pearson correlation) score.
+        """
 
         # edge-case: l2_norm is zero
         l2_prod = np.linalg.norm(user_1) * np.linalg.norm(user_2)
@@ -67,7 +75,7 @@ class UserMemoryModel:
         return 0
 
     def predict(self, user_id: int, item_id: int) -> float:
-        """Predicts rating of the target item for a user.
+        """ Predicts rating of the target item for a user.
 
         Args:
             user_id (int): index of the target user.
@@ -105,11 +113,6 @@ class UserMemoryModel:
         peer_sims = np.delete(user_sims, user_id)
         peer_sims = np.nan_to_num(peer_sims)
 
-        # avoid near-zero peer similarity norm (denominator)
-        sim_norm: float = sum(peer_sims)
-        if abs(sim_norm) < 0.2:
-            return np.nan
-
         item_ratings = self.rating_matrix[:, item_id]
         peer_ratings = np.delete(item_ratings, user_id)
 
@@ -118,20 +121,22 @@ class UserMemoryModel:
         valid_ratings = ~np.isnan(peer_ratings)
         sr_pair_exists: bool = (valid_sim & valid_ratings).any()
 
+        # similarity norm of peers with observed ratings
+        peer_mus = np.delete(self.mus, user_id)
+        sim_norm: float = peer_sims @ ~np.isnan(peer_ratings)
+
         # predict item rating for user as similarity norm weighted dot product
         # of peers similarity and observed peer ratings for the item
-        if sr_pair_exists:
-            peer_mus = np.delete(self.mus, user_id)
+        # edge-case: near-zero peer similarity norm (denominator)
+        if sr_pair_exists and abs(sim_norm) > 0.2:
             peer_ratings = np.nan_to_num(peer_ratings - peer_mus)
             pred_r = self.mus[user_id] + peer_sims @ peer_ratings / sim_norm
-
-        # cache predicted rating
-        self.cached_ratings[user_id, item_id] = pred_r
+            self.cached_ratings[user_id, item_id] = pred_r
 
         return pred_r
 
     def complete_rating_matrix(self) -> np.ndarray:
-        """ Fills missing ratings in the rating matrix. """
+        """ Predicts missing ratings for all users. """
 
         for user_id in range(self.n_users):
             for item_id in range(self.n_items):
@@ -140,7 +145,16 @@ class UserMemoryModel:
         return self.cached_ratings
 
     def top_k_items(self, user_id: int, k: int = 1) -> list[int]:
-        """ Predicts top-k items for an user. """
+        """ Predicts top-k items for a user.
+
+        Args:
+            user_id (int): target user to make prediction for.
+            k (int, optional): number of predicted top rated items.
+                Defaults to 1.
+
+        Returns:
+            list[int]: indices of predicted top rated items.
+        """
 
         # predict missing ratings for user
         user_ratings: np.ndarray = self.cached_ratings[user_id]
