@@ -29,6 +29,9 @@ array([[nan,  2.,  0., nan],
 
 >>> umm = UserMemoryModel(rating_matrix)
 
+>>> # fit model to observed ratings
+>>> umm.fit(rating_matrix)
+
 >>> # predict rating of item(0) for user(0)
 >>> umm.predict(user_id=0, item_id=0)
 2.0
@@ -45,7 +48,7 @@ array([[ 2. ,  2. ,  0. ,  nan],
        [ 1. ,  0. , -1. ,  1. ]])
 
 >>> # estimated similarity scores of users
->>> umm.similarity_scores.round(1)
+>>> umm.sim_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
        [ 0. ,  1. , -1. , -1. ],
        [-1. , -1. ,  1. ,  0.7],
