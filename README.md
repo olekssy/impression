@@ -48,7 +48,7 @@ array([[ 2. ,  2. ,  0. ,  nan],
        [ 1. ,  0. , -1. ,  1. ]])
 
 >>> # estimated similarity scores of users
->>> umm.sim_scores.round(1)
+>>> umm.similarity_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
        [ nan,  1. , -1. , -1. ],
        [ nan,  nan,  1. ,  0.7],
