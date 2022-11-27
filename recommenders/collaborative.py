@@ -24,7 +24,7 @@ class UserMemoryModel:
             [1, 0, -1, np.nan],
         ])
 
-        umm = UserMemoryModel(rating_matrix)
+        umm = UserMemoryModel()
 
         # fit model to observed ratings
         umm.fit(rating_matrix)
@@ -53,7 +53,7 @@ class UserMemoryModel:
         # m x n (mutable) matrix of predicted and observed ratings
         self.pred_ratings: np.ndarray
 
-        # m x m user similarity score matrix, with diagonal of ones
+        # m x m upper diagonal user similarity score matrix
         self.sim_scores: np.ndarray
 
         # mean observed user ratings for mean-centering
@@ -80,6 +80,39 @@ class UserMemoryModel:
         if round(l2_prod):
             return user_1 @ user_2 / l2_prod
         return 0
+
+    def _get_sim_scores(self, user_id: int) -> np.ndarray:
+        """ Gets user-peers similarity scores. Estimates missing score as
+            Pearson correlation of mutually observed ratings item ratings.
+            Fills missing sim scores in the upper diagonal m x m matrix.
+        """
+
+        top = self.sim_scores[:user_id, user_id]
+        right = self.sim_scores[user_id, user_id:]
+        user_sims = np.concatenate((top, right), axis=None)
+
+        if not np.isnan(user_sims).any():
+            return user_sims
+
+        user_ratings = self.observed_ratings[user_id]
+        observed_user_map = ~np.isnan(user_ratings)
+        missing_sim_peers = np.argwhere(np.isnan(user_sims)).flatten()
+
+        for peer_id in missing_sim_peers:
+            peer_ratings = self.observed_ratings[peer_id]
+            observed_peer_map = ~np.isnan(peer_ratings)
+            observed_mutual_map = observed_user_map & observed_peer_map
+
+            # at least one observed mutual rating required to estimate sim score
+            sim_score: float = 0.0
+            if user_ratings[observed_mutual_map].size:
+                sim_score = self._cosine(
+                    user_ratings[observed_mutual_map] - self.mu[user_id],
+                    peer_ratings[observed_mutual_map] - self.mu[peer_id])
+            self.sim_scores[min(user_id, peer_id),
+                            max(user_id, peer_id)] = sim_score
+
+        return np.concatenate((top, right), axis=None)
 
     def fit(self, observed_ratings: np.ndarray) -> None:
         """ Fits model to observed ratings.
@@ -121,26 +154,8 @@ class UserMemoryModel:
         if not np.isnan(pred_r):
             return pred_r
 
-        # predict missing peer similarity scores from mutually observed ratings
-        user_ratings = self.observed_ratings[user_id]
-        observed_user_map = ~np.isnan(user_ratings)
-
-        user_sims = self.sim_scores[user_id]
-        missing_sim_ids = np.argwhere(np.isnan(user_sims)).flatten()
-
-        for peer_id in missing_sim_ids:
-            peer_ratings = self.observed_ratings[peer_id]
-            observed_peer_map = ~np.isnan(peer_ratings)
-            observed_mutual_map = observed_user_map & observed_peer_map
-
-            # at least one observed mutual rating required to estimate sim score
-            sim_score: float = 0.0
-            if user_ratings[observed_mutual_map].size:
-                sim_score = self._cosine(
-                    user_ratings[observed_mutual_map] - self.mu[user_id],
-                    peer_ratings[observed_mutual_map] - self.mu[peer_id])
-            self.sim_scores[user_id, peer_id] = sim_score
-
+        # get similarity scores and peer ratings
+        user_sims = self._get_sim_scores(user_id)
         peer_sims = np.delete(user_sims, user_id)
         peer_sims = np.nan_to_num(peer_sims)
 
