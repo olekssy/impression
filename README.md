@@ -27,7 +27,7 @@ array([[nan,  2.,  0., nan],
        [ 1., -1., nan, nan],
        [ 1.,  0., -1., nan]])
 
->>> umm = UserMemoryModel(rating_matrix)
+>>> umm = UserMemoryModel()
 
 >>> # fit model to observed ratings
 >>> umm.fit(rating_matrix)
@@ -50,9 +50,9 @@ array([[ 2. ,  2. ,  0. ,  nan],
 >>> # estimated similarity scores of users
 >>> umm.sim_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
-       [ 0. ,  1. , -1. , -1. ],
-       [-1. , -1. ,  1. ,  0.7],
-       [ 0.7, -1. ,  0.7,  1. ]])
+       [ nan,  1. , -1. , -1. ],
+       [ nan,  nan,  1. ,  0.7],
+       [ nan,  nan,  nan,  1. ]])
 ```
 
 Note, the model fails to predict ratings for some user-item pairs due to the sparsity of observed ratings and lack of similar peers.
