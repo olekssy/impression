@@ -13,9 +13,8 @@ A library of recommender systems with collaborative, content-based filtering, an
 A neighborhood-based collaborative filtering method for predicting the target item rating for a user from observed ratings of similar users.
 
 * Takes an arbitraty `m x n` rating matrix with discrete or continuous observed ratings.
-* Estimates user similarity score as Pearson correlation coefficient of mutually observed item ratings.
-* Predicts the rating of an item for a user as a weighted dot product of similarity scores and observed peer ratings.
-* Eliminates prediction bias by mean-centering observed peer ratings.
+* Estimates user similarity score as Pearson correlation (cosine similarity, z-score) of mutually observed item ratings.
+* Predicts the rating of an item for a user as a weighted dot product of positive similarity scores and observed peer ratings.
 
 ```python
 >>> from recommenders.collaborative import UserMemoryModel
@@ -27,10 +26,17 @@ array([[nan,  2.,  0., nan],
        [ 1., -1., nan, nan],
        [ 1.,  0., -1., nan]])
 
->>> umm = UserMemoryModel()
+# set similarity method, h-parameters
+>>> umm = UserMemoryModel(sim_method='pearson',
+                          alpha=1.0,
+                          min_similarity=0.1)
 
 >>> # fit model to observed ratings
 >>> umm.fit(rating_matrix)
+
+>>> # estimate similarity of user(1) to peers
+>>> umm.similarity(user_id=1)
+array([ 0.,  1., -1., -1.])
 
 >>> # predict rating of item(0) for user(0)
 >>> umm.predict(user_id=0, item_id=0)
@@ -38,14 +44,14 @@ array([[nan,  2.,  0., nan],
 
 >>> # predict top-3 rated items for user(2)
 >>> umm.top_k_items(user_id=2, k=3)
-[0, 3, 1]
+[0, 1, 2]
 
 >>> # predict missing ratings for all users
 >>> umm.complete_rating_matrix()
-array([[ 2. ,  2. ,  0. ,  nan],
-       [-2. , -1.5, -2. ,  0. ],
-       [ 1. , -1. , -1. ,  1. ],
-       [ 1. ,  0. , -1. ,  1. ]])
+array([[ 2.,  2.,  0., nan],
+       [-2., nan, nan,  0.],
+       [ 1., -1., -1., nan],
+       [ 1.,  0., -1., nan]])
 
 >>> # estimated similarity scores of users
 >>> umm.similarity_scores.round(1)

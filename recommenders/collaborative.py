@@ -3,12 +3,47 @@
 import numpy as np
 
 
+def cosine_similarity(r_user: np.ndarray,
+                      r_peer: np.ndarray,
+                      min_denominator: float = 0.1) -> float:
+    """ Calculates cosine similarity of two users from mutually observed
+        ratings. The method calculates Pearson correlation, if user ratings are
+        mean-centered with the user mu.
+        The method calculates adj. cosine similarity, if passed user ratings are
+        mean-centered with the item mu.
+
+        Args:
+            r_user (np.ndarray): mutualy observed user ratings.
+            r_peer (np.ndarray): mutualy observed peer ratings.
+            min_denominator (float): min l2 norm to prevent exploding score.
+
+        Returns:
+            float: cosine similarity score.
+        """
+
+    # edge-case: l2_norm is near-zero
+    l2_prod = np.linalg.norm(r_user) * np.linalg.norm(r_peer)
+    if abs(l2_prod) > min_denominator:
+        return r_user @ r_peer / l2_prod
+    return 0.0
+
+
 class UserMemoryModel:
     """ Class for predicting item ratings with the user-based method.
+        It provides an abstraction for solving a matrix completion problem, and
+        computing top-k items for a user.
+
+    Hyperparameters:
+        alpha (1.0): an exponent that amplifies similarity score magnitude.
+        min_sim (0.1): select peers with positive significant similarity scores.
+        sim_method (cosine, pearson, z-score): method for predicting ratings
+        and similarity scores.
 
     Methods:
-        fit(self, observed_ratings: np.ndarray) -> None:
+        fit(observed_ratings: np.ndarray) -> None:
             Fits model to observed ratings.
+        similarity(user_id: int) -> np.ndarray:
+            Gets user-peers similarity scores.
         predict(user_id: int, item_id: int) -> float:
             Predicts rating of the target item for a user.
         top_k_items(user_id: int, k: int = 1) -> list[int]:
@@ -29,6 +64,9 @@ class UserMemoryModel:
         # fit model to observed ratings
         umm.fit(rating_matrix)
 
+        # estimate similarity of user(1) to peers
+        print(umm.similarity(user_id=1))
+
         # predict rating of item(0) for user(0)
         print(umm.predict(user_id=0, item_id=0))
 
@@ -42,7 +80,10 @@ class UserMemoryModel:
         print(umm.similarity_scores.round(1))
     """
 
-    def __init__(self) -> None:
+    def __init__(self,
+                 sim_method: str = 'pearson',
+                 alpha: float = 1.0,
+                 min_similarity: float = 0.1) -> None:
         # m x n (immutable) observed rating matrix
         self.observed_ratings: np.ndarray
 
@@ -56,34 +97,59 @@ class UserMemoryModel:
         # m x m upper diagonal user similarity score matrix
         self.similarity_scores: np.ndarray
 
-        # mean observed user ratings for mean-centering
+        # mean, std of observed user ratings for mean-centering and z-scores
         self.mu: np.ndarray
+        self.sigma: np.ndarray
 
-        # prevents exploding pred sim scores, ratings due to a near-zero norm
-        self._min_denominator: float = 0.2
+        # == Hyperparameters ==
 
-    def _cosine(self, user_1: np.ndarray, user_2: np.ndarray) -> float:
-        """ Calculates cosine similarity of two users from mutual ratings.
-            Method calculates Pearson correlation similarity score, if passed
-            mean-centered rating vectors.
+        # prevents exploding sim scores and pred ratings
+        self.min_denominator: float = 0.1
+
+        # similarity score methods
+        self.valid_pred_methods: list[str] = ['cosine', 'pearson', 'z-score']
+        if sim_method in self.valid_pred_methods:
+            self.sim_method: str = sim_method
+        else:
+            raise ValueError(
+                'Invalid similarity method. Select from the following:',
+                self.valid_pred_methods)
+
+        # minimum significant similarity score to include peer ratings
+        # negative or near-zero sims do contribute to rating prediction
+        self.min_sim = min_similarity
+
+        # h-parameter that amplifies the sim scores magnitude
+        self.alpha = alpha
+
+    def fit(self, observed_ratings: np.ndarray) -> None:
+        """ Fits model attrs to observed ratings. Sets mean rating for a user.
 
         Args:
-            user_1 (np.ndarray): mutualy observed ratings of user/peer.
-            user_2 (np.ndarray): mutualy observed ratings of user/peer.
-
-        Returns:
-            float: cosine similarity (Pearson correlation) score.
+            observed_ratings (np.ndarray): observed user-item ratings matrix.
+            sim_method (str): method for estimating similarity score. Available
+                methods are listed in the valid_sim_methods attr.
+            min_sim (float): min similarity required to include peer ratings
+                into prediction.
         """
 
-        # edge-case: l2_norm is near-zero
-        l2_prod = np.linalg.norm(user_1) * np.linalg.norm(user_2)
-        if abs(l2_prod) > self._min_denominator:
-            return user_1 @ user_2 / l2_prod
-        return 0.0
+        # init model attributes
+        self.observed_ratings = observed_ratings
+        self.n_users, self.n_items = self.observed_ratings.shape
+        self.pred_ratings = self.observed_ratings.copy()
 
-    def _get_sim_scores(self, user_id: int) -> np.ndarray:
-        """ Gets user-peers similarity scores. Estimates missing score as
-            Pearson correlation of mutually observed item ratings.
+        self.similarity_scores = np.full((self.n_users, self.n_users), np.nan)
+        np.fill_diagonal(self.similarity_scores, 1.0)
+
+        self.mu = np.nanmean(self.observed_ratings, 1)
+        self.sigma = np.nanstd(self.observed_ratings, 1)
+        # edge-case: set near-zero sigma (denominator) to one
+        self.sigma = np.where(
+            abs(self.sigma) < self.min_denominator, 1, self.sigma)
+
+    def similarity(self, user_id: int) -> np.ndarray:
+        """ Gets user-peers similarity scores. Estimates missing sim score of
+            mutually observed item ratings.
             Fills missing sim scores in the upper diagonal m x m matrix.
         """
 
@@ -107,30 +173,25 @@ class UserMemoryModel:
             # at least one observed mutual rating required to estimate sim score
             sim_score: float = 0.0
             if user_ratings[mutual_map].size:
-                sim_score = self._cosine(
-                    user_ratings[mutual_map] - self.mu[user_id],
-                    peer_ratings[mutual_map] - self.mu[peer_id])
+                # base case cosine similarity
+                r_user = user_ratings[mutual_map]
+                r_peer = peer_ratings[mutual_map]
+
+                if self.sim_method == 'pearson':
+                    r_user -= self.mu[user_id]
+                    r_peer -= self.mu[peer_id]
+
+                elif self.sim_method == 'z-score':
+                    r_user = (r_user - self.mu[user_id]) / self.sigma[user_id]
+                    r_peer = (r_peer - self.mu[peer_id]) / self.sigma[peer_id]
+
+                sim_score = cosine_similarity(r_user, r_peer,
+                                              self.min_denominator)
+
             self.similarity_scores[min(user_id, peer_id),
                                    max(user_id, peer_id)] = sim_score
 
         return np.concatenate((top, right), axis=None)
-
-    def fit(self, observed_ratings: np.ndarray) -> None:
-        """ Fits model attrs to observed ratings. Sets mean rating for a user.
-
-        Args:
-            observed_ratings (np.ndarray): observed user-item ratings matrix.
-        """
-
-        # init model attributes
-        self.observed_ratings = observed_ratings
-        self.n_users, self.n_items = self.observed_ratings.shape
-        self.pred_ratings = self.observed_ratings.copy()
-
-        self.similarity_scores = np.full((self.n_users, self.n_users), np.nan)
-        np.fill_diagonal(self.similarity_scores, 1.0)
-
-        self.mu = np.nanmean(self.observed_ratings, 1)
 
     def predict(self, user_id: int, item_id: int) -> float:
         """ Predicts rating of the target item for a user.
@@ -148,10 +209,12 @@ class UserMemoryModel:
         if not np.isnan(pred_r):
             return pred_r
 
-        # get similarity scores and peer ratings for a user
-        user_sims = self._get_sim_scores(user_id)
+        # select significant similarity scores and peer ratings for a user
+        user_sims = self.similarity(user_id)
         peer_sims = np.delete(user_sims, user_id)
         peer_sims = np.nan_to_num(peer_sims)
+        peer_sims = np.power(peer_sims, self.alpha)
+        peer_sims *= np.where(peer_sims >= self.min_sim, peer_sims, 0)
 
         item_ratings = self.observed_ratings[:, item_id]
         peer_ratings = np.delete(item_ratings, user_id)
@@ -159,19 +222,33 @@ class UserMemoryModel:
         # at least one valid sim-rating pair required to predict rating
         valid_sim = np.where(peer_sims != 0, True, False)
         valid_ratings = ~np.isnan(peer_ratings)
-        sr_pair_exists: bool = (valid_sim & valid_ratings).any()
+        peers_exist: bool = (valid_sim & valid_ratings).any()
 
-        # similarity norm of peers with observed ratings
+        # similarity mu, sigma, norm of peers with observed ratings
         peer_mus = np.delete(self.mu, user_id)
+        peer_sigma = np.delete(self.sigma, user_id)
         sim_norm: float = peer_sims @ valid_ratings
 
         # predict item rating for a user as similarity norm weighted dot product
         # of peers similarity and observed peer ratings for the item
         # edge-case: near-zero peer similarity norm (denominator)
-        if sr_pair_exists and abs(sim_norm) > self._min_denominator:
-            peer_ratings = np.nan_to_num(peer_ratings - peer_mus)
+        if not peers_exist and abs(sim_norm) < self.min_denominator:
+            return pred_r
+
+        peer_ratings = np.nan_to_num(peer_ratings)
+        if self.sim_method == 'cosine':
+            pred_r = peer_sims @ peer_ratings / sim_norm
+
+        elif self.sim_method == 'pearson':
+            peer_ratings -= peer_mus
             pred_r = self.mu[user_id] + peer_sims @ peer_ratings / sim_norm
-            self.pred_ratings[user_id, item_id] = pred_r
+
+        elif self.sim_method == 'z-score':
+            peer_ratings = (peer_ratings - peer_mus) / peer_sigma
+            pred_r = (self.mu[user_id] +
+                      self.sigma[user_id] * peer_sims @ peer_ratings / sim_norm)
+
+        self.pred_ratings[user_id, item_id] = pred_r
 
         return pred_r
 
