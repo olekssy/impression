@@ -18,50 +18,73 @@ A neighborhood-based collaborative filtering method for predicting the target it
 
 ```python
 >>> from recommenders.collaborative import UserMemoryModel
+```
 
->>> # m_users x n_items observed ratings matrix
+Define `m_users x n_items` observed ratings matrix.
+
+```python
 >>> rating_matrix
 array([[nan,  2.,  0., nan],
        [-2., nan, nan,  0.],
        [ 1., -1., nan, nan],
        [ 1.,  0., -1., nan]])
+```
 
-# set similarity method, h-parameters
+Set similarity method (cosine, pearson, z-score), h-parameters.
+
+```python
 >>> umm = UserMemoryModel(sim_method='pearson',
                           alpha=1.0,
                           min_similarity=0.1)
+```
 
->>> # fit model to observed ratings
+Fit model to observed ratings.
+
+```python
 >>> umm.fit(rating_matrix)
+```
 
->>> # estimate similarity of user(1) to peers
+Estimate similarity of user(1) to peers.
+
+```python
 >>> umm.similarity(user_id=1)
 array([ 0.,  1., -1., -1.])
+```
 
->>> # predict rating of item(0) for user(0)
+Predict rating of item(0) for user(0).
+
+```python
 >>> umm.predict(user_id=0, item_id=0)
 2.0
+```
 
->>> # predict top-3 rated items for user(2)
+Predict top-3 rated items for user(2).
+
+```python
 >>> umm.top_k_items(user_id=2, k=3)
 [0, 1, 2]
+```
 
->>> # predict missing ratings for all users
+Predict missing ratings for all users.
+Note, the model fails to predict ratings for some user-item pairs due to the sparsity of observed ratings and lack of similar peers.
+
+```python
 >>> umm.complete_rating_matrix()
 array([[ 2.,  2.,  0., nan],
        [-2., nan, nan,  0.],
        [ 1., -1., -1., nan],
        [ 1.,  0., -1., nan]])
+```
 
->>> # estimated similarity scores of users
+Estimated similarity scores of users
+
+```python
 >>> umm.similarity_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
        [ nan,  1. , -1. , -1. ],
        [ nan,  nan,  1. ,  0.7],
        [ nan,  nan,  nan,  1. ]])
 ```
-
-Note, the model fails to predict ratings for some user-item pairs due to the sparsity of observed ratings and lack of similar peers.
 
 ## Dependencies
 

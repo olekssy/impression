@@ -8,9 +8,8 @@ def cosine_similarity(r_user: np.ndarray,
                       min_denominator: float = 0.1) -> float:
     """ Calculates cosine similarity of two users from mutually observed
         ratings. The method calculates Pearson correlation, if user ratings are
-        mean-centered with the user mu.
-        The method calculates adj. cosine similarity, if passed user ratings are
-        mean-centered with the item mu.
+        mean-centered with the user mu. The method calculates adj. cosine
+        similarity, if passed user ratings are mean-centered with the item mu.
 
         Args:
             r_user (np.ndarray): mutualy observed user ratings.
@@ -50,34 +49,6 @@ class UserMemoryModel:
             Predicts top-k items for a user.
         complete_rating_matrix() -> np.ndarray:
             Predicts missing ratings for all users.
-
-    Typical usage:
-        rating_matrix = np.array([
-            [np.nan, 2, 0, np.nan],
-            [-2, np.nan, np.nan, 0],
-            [1, -1, np.nan, np.nan],
-            [1, 0, -1, np.nan],
-        ])
-
-        umm = UserMemoryModel()
-
-        # fit model to observed ratings
-        umm.fit(rating_matrix)
-
-        # estimate similarity of user(1) to peers
-        print(umm.similarity(user_id=1))
-
-        # predict rating of item(0) for user(0)
-        print(umm.predict(user_id=0, item_id=0))
-
-        # predict top-3 rated items for user(2)
-        print(umm.top_k_items(user_id=2, k=3))
-
-        # predict missing ratings for all users
-        print(umm.complete_rating_matrix())
-
-        # estimated similarity matrix
-        print(umm.similarity_scores.round(1))
     """
 
     def __init__(self,
@@ -108,12 +79,11 @@ class UserMemoryModel:
 
         # similarity score methods
         self.valid_pred_methods: list[str] = ['cosine', 'pearson', 'z-score']
-        if sim_method in self.valid_pred_methods:
-            self.sim_method: str = sim_method
-        else:
+        if sim_method not in self.valid_pred_methods:
             raise ValueError(
                 'Invalid similarity method. Select from the following:',
                 self.valid_pred_methods)
+        self.sim_method: str = sim_method
 
         # minimum significant similarity score to include peer ratings
         # negative or near-zero sims do contribute to rating prediction
