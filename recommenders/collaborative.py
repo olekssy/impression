@@ -45,7 +45,9 @@ class UserMemoryModel:
             Gets user-peers similarity scores.
         predict(user_id: int, item_id: int) -> float:
             Predicts rating of the target item for a user.
-        top_k_items(user_id: int, k: int = 1) -> list[int]:
+        top_k_items(user_id: int,
+                    k: int = 1,
+                    min_rating: float = 0) -> list[int]:
             Predicts top-k items for a user.
         complete_rating_matrix() -> np.ndarray:
             Predicts missing ratings for all users.
@@ -231,13 +233,18 @@ class UserMemoryModel:
 
         return self.pred_ratings
 
-    def top_k_items(self, user_id: int, k: int = 1) -> list[int]:
+    def top_k_items(self,
+                    user_id: int,
+                    k: int = 1,
+                    min_rating: float = 0) -> list[int]:
         """ Predicts top-k items for a user.
 
         Args:
             user_id (int): target user to make prediction for.
             k (int, optional): number of predicted top rated items.
                 Defaults to 1.
+            min_rating (int, optional): min positive rating to be considered in
+                recommendation.
 
         Returns:
             list[int]: indices of predicted top rated items.
@@ -249,7 +256,8 @@ class UserMemoryModel:
         for item_id in missing_rating_ids:
             self.predict(user_id, item_id)
 
-        # select top-k rated items limited by number of available ratings
+        # select top-k rated items limited by the number of positive ratings
+        user_ratings = np.where(user_ratings < min_rating, np.nan, user_ratings)
         k = min(k, sum(~np.isnan(user_ratings)))
         user_ratings = np.nan_to_num(user_ratings, nan=-np.inf)
 

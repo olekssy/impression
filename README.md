@@ -58,10 +58,10 @@ Predict rating of item(0) for user(0).
 2.0
 ```
 
-Predict top-3 rated items for user(2).
+Predict top-3 rated items for user(0).
 
 ```python
->>> umm.top_k_items(user_id=2, k=3)
+>>> umm.top_k_items(user_id=0, k=3)
 [0, 1, 2]
 ```
 

@@ -115,4 +115,4 @@ def test_matrix_completion(model: UserMemoryModel, ratings: np.ndarray) -> None:
 def test_top_k(model: UserMemoryModel, ratings: np.ndarray) -> None:
     model.fit(ratings)
     assert model.top_k_items(0, 3) == [0, 1, 2]
-    assert model.top_k_items(2, 3) == [0, 1, 2]
+    assert model.top_k_items(2, 3) == [0]
