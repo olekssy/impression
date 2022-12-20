@@ -13,45 +13,34 @@ A library of recommender systems with collaborative, content-based filtering, an
 
 ## Collaborative filtering
 
+* Takes an arbitraty `m x n` rating matrix with discrete or continuous observed ratings.
+* Computes similarity score matrix in the offline mode.
+* Estimates user (item) similarity score as Pearson correlation, (adj) cosine similarity, z-score of mutually observed ratings.
+* Predicts the rating of an item for a user as a weighted dot product of positive similarity scores and observed peer ratings.
+* Tune model by fitting similarity sensitivity with alpha > 1, and min significant similarity score threshold.
+
 ### User-based memory model
 
 A neighborhood-based collaborative filtering method for predicting the target item rating for a user from observed ratings of similar users.
 
-* Takes an arbitraty `m x n` rating matrix with discrete or continuous observed ratings.
-* Estimates user similarity score as Pearson correlation (cosine similarity, z-score) of mutually observed item ratings.
-* Predicts the rating of an item for a user as a weighted dot product of positive similarity scores and observed peer ratings.
-
 ```python
 >>> from recommenders.collaborative import UserMemoryModel
-```
 
-Define `m_users x n_items` observed ratings matrix.
-
-```python
 >>> rating_matrix
 array([[nan,  2.,  0., nan],
        [-2., nan, nan,  0.],
        [ 1., -1., nan, nan],
        [ 1.,  0., -1., nan]])
-```
 
-Set similarity method (cosine, pearson, z-score), h-parameters.
-
-```python
 >>> umm = UserMemoryModel(sim_method='pearson',
                           alpha=1.0,
                           min_similarity=0.1)
 ```
 
-Fit model to observed ratings.
+Estimate similarity of user(1) to peers based on the mutually observed ratings.
 
 ```python
 >>> umm.fit(rating_matrix)
-```
-
-Estimate similarity of user(1) to peers.
-
-```python
 >>> umm.similarity(user_id=1)
 array([ 0.,  1., -1., -1.])
 ```
@@ -97,37 +86,24 @@ array([[ 1. ,  0. , -1. ,  0.7],
 
 A neighborhood-based collaborative filtering method for predicting the target item rating for a user from observed ratings of similar users.
 
-* Takes an arbitraty `m x n` rating matrix with discrete or continuous observed ratings.
-* Estimates item similarity score as adj cosine similarity correlation of mutually observed user ratings.
-* Predicts the rating of an item for a user as a weighted dot product of positive similarity scores and observed ratings of comparable items.
-
-Define `m_users x n_items` observed ratings matrix.
-
 ```python
+>>> from recommenders.collaborative import ItemMemoryModel
+
 >>> rating_matrix
 array([[nan,  2.,  0., nan,  1., -1.],
        [-2., nan, nan,  0., nan,  1.],
        [ 1., -1., nan, nan,  0., nan],
        [ 1.,  0., -1., nan,  2., -2.]])
-```
 
-Initialize the item-based model class with optional hyperparameters: similarity sensitivity (alpha > 1), and significant similarity score threshold.
-
-```python
 >>> imm = ItemMemoryModel(alpha=1.0, min_similarity=0.1)
 ```
 
-Fit model to observed ratings.
-
-```python
->>> imm.fit(rating_matrix)
-```
-
-Estimate similarity of item(0) to comparable items.
+Estimate similarity of item(0) to comparable items from observed ratings.
 Note, unlike the user-based model, the item-based model estimates similarity scores between items (columns).
 The element at 0-th index in the array is the 0-th item itself.
 
 ```python
+>>> imm.fit(rating_matrix)
 >>> imm.similarity(0).round(1)
 array([ 1. , -0.7, -1. , -1. ,  0.7, -0.9])
 ```
@@ -179,4 +155,4 @@ Install environment and dependencies with `pipenv sync --dev`
 
 ## References
 
-* Aggarwal, C. C. (2016), Recommender Systems - The Textbook , Springer.
+* Aggarwal, C. C. (2016), Recommender Systems - The Textbook, Springer.

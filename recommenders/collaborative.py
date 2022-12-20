@@ -44,7 +44,7 @@ class UserMemoryModel:
 
     Methods:
         fit(observed_ratings: np.ndarray) -> None:
-            Fits model to observed ratings.
+            Fits model to observed ratings. Computes similarity score matrix.
         similarity(user_id: int) -> np.ndarray:
             Gets user-peers similarity scores.
         predict(user_id: int, item_id: int) -> float:
@@ -100,6 +100,7 @@ class UserMemoryModel:
 
     def fit(self, observed_ratings: np.ndarray) -> None:
         """ Fits model attrs to observed ratings. Sets mean rating for a user.
+            Computes similarity score matrix.
 
         Args:
             observed_ratings (np.ndarray): observed user-item ratings matrix.
@@ -122,6 +123,10 @@ class UserMemoryModel:
         # edge-case: set near-zero sigma (denominator) to one
         self.sigma = np.where(
             abs(self.sigma) < self.min_denominator, 1, self.sigma)
+
+        # compute similarity matrix
+        for user_id in range(self.n_users):
+            self.similarity(user_id)
 
     def similarity(self, user_id: int) -> np.ndarray:
         """ Gets user-peers similarity scores. Estimates missing sim score of
@@ -279,7 +284,7 @@ class ItemMemoryModel:
 
     Methods:
         fit(observed_ratings: np.ndarray) -> None:
-            Fits model to observed ratings.
+            Fits model to observed ratings. Computes similarity score matrix.
         similarity(user_id: int) -> np.ndarray:
             Gets item-comps adj. cosine similarity scores.
         predict(user_id: int, item_id: int) -> float:
@@ -327,6 +332,7 @@ class ItemMemoryModel:
 
     def fit(self, observed_ratings: np.ndarray) -> None:
         """ Fits model attrs to observed ratings.
+            Computes similarity score matrix.
 
         Args:
             observed_ratings (np.ndarray): observed user-item ratings matrix.
@@ -353,6 +359,10 @@ class ItemMemoryModel:
         # mean-center user ratings
         self.mc_ratings = (self.observed_ratings -
                            self.mu.reshape(self.n_users, 1))
+
+        # compute similarity score matrix
+        for item_id in range(self.n_items):
+            self.similarity(item_id)
 
     def similarity(self, item_id: int) -> np.ndarray:
         """ Gets item-comps adj. cosine similarity scores. Estimates missing
