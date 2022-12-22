@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from recommenders.collaborative import UserMemoryModel
+from recommenders.collaborative_filtering import UserMemoryModel
 
 
 @pytest.fixture
@@ -71,7 +71,7 @@ def test_sim_cosine(model: UserMemoryModel, ratings: np.ndarray) -> None:
     model.sim_method = 'cosine'
     model.fit(ratings)
     model.complete_rating_matrix()
-    np.testing.assert_array_almost_equal(model.similarity_scores, expected, 1)
+    np.testing.assert_array_almost_equal(model.sim_scores, expected, 1)
 
 
 def test_sim_pearson(model: UserMemoryModel, ratings: np.ndarray) -> None:
@@ -84,7 +84,7 @@ def test_sim_pearson(model: UserMemoryModel, ratings: np.ndarray) -> None:
     model.sim_method = 'pearson'
     model.fit(ratings)
     model.complete_rating_matrix()
-    np.testing.assert_array_almost_equal(model.similarity_scores, expected, 1)
+    np.testing.assert_array_almost_equal(model.sim_scores, expected, 1)
 
 
 def test_sim_zscore(model: UserMemoryModel, ratings: np.ndarray) -> None:
@@ -96,8 +96,7 @@ def test_sim_zscore(model: UserMemoryModel, ratings: np.ndarray) -> None:
     ])
     model.sim_method = 'z-score'
     model.fit(ratings)
-    model.complete_rating_matrix()
-    np.testing.assert_array_almost_equal(model.similarity_scores, expected, 1)
+    np.testing.assert_array_almost_equal(model.sim_scores, expected, 1)
 
 
 def test_matrix_completion(model: UserMemoryModel, ratings: np.ndarray) -> None:

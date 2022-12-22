@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from recommenders.collaborative import ItemMemoryModel
+from recommenders.collaborative_filtering import ItemMemoryModel
 
 
 @pytest.fixture
@@ -38,18 +38,10 @@ def test_mu(model: ItemMemoryModel, ratings: np.ndarray) -> None:
     np.testing.assert_array_almost_equal(model.mu, expected, 1)
 
 
-def test_sigma(model: ItemMemoryModel, ratings: np.ndarray) -> None:
-    expected = np.array([1.1, 1.2, 0.8, 1.4])
-    model.fit(ratings)
-    np.testing.assert_array_almost_equal(model.sigma, expected, 1)
-
-
 def test_similarity(model: ItemMemoryModel, ratings: np.ndarray) -> None:
     expected = np.array([1.0, -0.7, -1.0, -1.0, 0.7, -0.9])
     model.fit(ratings)
-    model.complete_rating_matrix()
-    np.testing.assert_array_almost_equal(model.similarity_scores[0], expected,
-                                         1)
+    np.testing.assert_array_almost_equal(model.sim_scores[0], expected, 1)
 
 
 def test_top_k(model: ItemMemoryModel, ratings: np.ndarray) -> None:
