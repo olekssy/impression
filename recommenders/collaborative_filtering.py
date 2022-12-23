@@ -54,8 +54,8 @@ class GenericMemoryModel:
         # higher compression rate speed up fitting the sim score matrix
         self.compression_rate: float
 
-    def _cosine_similarity(self, r_target: np.ndarray,
-                           r_peer: np.ndarray) -> float:
+    def cosine_similarity(self, r_target: np.ndarray,
+                          r_peer: np.ndarray) -> float:
         """ Calculates cosine similarity of mutually observed ratings.
             The method calculates Pearson correlation of mean-centered ratings.
             The method calculates adj. cosine similarity of user ratings
@@ -79,13 +79,13 @@ class GenericMemoryModel:
 class UserMemoryModel(GenericMemoryModel):
     """ Class for predicting item ratings for the target user with the
         user-based neighborhood method. It provides an abstraction for solving
-        a matrix completion problem, and predicting the top-k items for a user.
+        a matrix completion problem and predicting the top-k items for a user.
 
-        The class supports a dimensionality reduction of observed rating matrix
-        with SVD, PCA compression methods for speeding up fitting similarity
-        matrix. Both compression methods provides more robust predictions with
-        mean-centering the rating matrix across users' ratings (rows) and items'
-        ratings (cols).
+        The class supports a dimensionality reduction of the observed rating
+        matrix with SVD, PCA compression methods for speeding up fitting
+        similarity matrix. Both compression methods provide more robust
+        predictions with mean-centering the rating matrix across users' ratings
+        (rows) and items' ratings (cols).
 
     Hyperparameters:
         similarity_method (cosine, pearson, z-score): a method for fitting
@@ -93,7 +93,7 @@ class UserMemoryModel(GenericMemoryModel):
         min_similarity (≥0.1): minimum significant similarity score of a peer
             rating for prediction.
         alpha (≥1.0): an exponent amplifies the weight of high sim scores.
-        compression_method (lossless, svd, pca): a dimensionality reduction
+        compression_method (none, svd, pca): a dimensionality reduction
             method for observed ratings.
         compression_rate (0 ≤ r < 1): controls the rating matrix dimensionality.
 
@@ -114,7 +114,7 @@ class UserMemoryModel(GenericMemoryModel):
                  similarity_method: str = 'pearson',
                  min_similarity: float = 0.1,
                  alpha: float = 1.0,
-                 compression_method: str = 'lossless',
+                 compression_method: str = 'none',
                  compression_rate: float = 0.0) -> None:
 
         # shared model attributes
@@ -135,7 +135,7 @@ class UserMemoryModel(GenericMemoryModel):
         self.sim_method = similarity_method
 
         # rating matrix dimensionality reduction method
-        self.valid_compression_methods = ['lossless', 'svd', 'pca']
+        self.valid_compression_methods = ['none', 'svd', 'pca']
         if compression_method not in self.valid_compression_methods:
             raise ValueError(
                 'Invalid compression method. Select from the following:',
@@ -196,10 +196,10 @@ class UserMemoryModel(GenericMemoryModel):
         comp_sigma = np.where(comp_sigma < self.min_denominator, 1, comp_sigma)
 
         for user_id in range(self.n_users):
-            self._similarity(user_id, comp_ratings, comp_mu, comp_sigma)
+            self.similarity(user_id, comp_ratings, comp_mu, comp_sigma)
 
-    def _similarity(self, user_id: int, rating_matrix: np.ndarray,
-                    mu: np.ndarray, sigma: np.ndarray) -> None:
+    def similarity(self, user_id: int, rating_matrix: np.ndarray,
+                   mu: np.ndarray, sigma: np.ndarray) -> None:
         """ Estimates missing sim score of mutually observed item ratings.
             Fills missing sim scores in the upper diagonal m x m matrix. """
 
@@ -232,7 +232,7 @@ class UserMemoryModel(GenericMemoryModel):
                     r_user = (r_user - mu[user_id]) / sigma[user_id]
                     r_peer = (r_peer - mu[peer_id]) / sigma[peer_id]
 
-                sim_score = super()._cosine_similarity(r_user, r_peer)
+                sim_score = super().cosine_similarity(r_user, r_peer)
 
             self.sim_scores[min(user_id, peer_id),
                             max(user_id, peer_id)] = sim_score
@@ -340,10 +340,10 @@ class UserMemoryModel(GenericMemoryModel):
 class ItemMemoryModel(GenericMemoryModel):
     """ Class for predicting item ratings for the target user with the
         item-based neighborhood method. It provides an abstraction for solving
-        a matrix completion problem, and predicting the top-k items for a user.
+        a matrix completion problem and predicting the top-k items for a user.
 
-        The class predicts rating of an item from the other similar items
-        rated by the target user. It provides more tailored recommendation for
+        The class predicts the rating of an item from other similar items
+        rated by the target user. It provides more tailored recommendations for
         a user, compared to the user-based neighborhood.
 
     Hyperparameters:
@@ -397,10 +397,9 @@ class ItemMemoryModel(GenericMemoryModel):
 
         # fit similarity score matrix
         for item_id in range(self.n_items):
-            self._similarity(item_id, rating_matrix)
+            self.similarity(item_id, rating_matrix)
 
-    def _similarity(self, item_id: int,
-                    rating_matrix: np.ndarray) -> np.ndarray:
+    def similarity(self, item_id: int, rating_matrix: np.ndarray) -> np.ndarray:
         """ Fits item-peers similarity to mutually observed ratings with
             adj. with cosine similarity scores. Fills missing sim scores in
             the upper diagonal n x n matrix.
@@ -426,7 +425,7 @@ class ItemMemoryModel(GenericMemoryModel):
                 r_item = item_ratings[mutual_map]
                 r_comp = comp_ratings[mutual_map]
 
-                sim_score = super()._cosine_similarity(r_item, r_comp)
+                sim_score = super().cosine_similarity(r_item, r_comp)
 
             self.sim_scores[min(item_id, comp_id),
                             max(item_id, comp_id)] = sim_score

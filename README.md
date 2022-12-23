@@ -10,6 +10,7 @@ A library of recommender systems with collaborative, content-based filtering, an
 
 * [User-based memory model](#user-based-memory-model)
 * [Item-based memory model](#item-based-memory-model)
+* [Latent factor model](#latent-factor-model)
 
 ## Collaborative filtering
 
@@ -24,7 +25,7 @@ A library of recommender systems with collaborative, content-based filtering, an
 A neighborhood-based collaborative filtering method for predicting the target item rating for a user from observed ratings of similar users.
 
 ```python
->>> from recommenders.collaborative import UserMemoryModel
+>>> from recommenders.collaborative_filtering import UserMemoryModel
 
 >>> rating_matrix
 array([[nan,  2.,  0., nan],
@@ -35,26 +36,12 @@ array([[nan,  2.,  0., nan],
 >>> umm = UserMemoryModel(sim_method='pearson',
                           alpha=1.0,
                           min_similarity=0.1)
-```
 
-Estimate similarity of user(1) to peers based on the mutually observed ratings.
-
-```python
 >>> umm.fit(rating_matrix)
->>> umm.similarity(user_id=1)
-array([ 0.,  1., -1., -1.])
-```
 
-Predict rating of item(0) for user(0).
-
-```python
 >>> umm.predict(user_id=0, item_id=0)
 2.0
-```
 
-Predict top-3 rated items for user(0).
-
-```python
 >>> umm.top_k_items(user_id=0, k=3)
 [0, 1, 2]
 ```
@@ -70,10 +57,10 @@ array([[ 2.,  2.,  0., nan],
        [ 1.,  0., -1., nan]])
 ```
 
-Estimated similarity scores of users.
+Estimated `m x m` similarity score matrix of users.
 
 ```python
->>> umm.similarity_scores.round(1)
+>>> umm.sim_scores.round(1)
 array([[ 1. ,  0. , -1. ,  0.7],
        [ nan,  1. , -1. , -1. ],
        [ nan,  nan,  1. ,  0.7],
@@ -85,9 +72,10 @@ array([[ 1. ,  0. , -1. ,  0.7],
 ### Item-based memory model
 
 A neighborhood-based collaborative filtering method for predicting the target item rating for a user from observed ratings of similar users.
+Unlike the user-based model, the item-based model estimates similarity scores between items (columns).
 
 ```python
->>> from recommenders.collaborative import ItemMemoryModel
+>>> from recommenders.collaborative_filtering import ItemMemoryModel
 
 >>> rating_matrix
 array([[nan,  2.,  0., nan,  1., -1.],
@@ -96,29 +84,13 @@ array([[nan,  2.,  0., nan,  1., -1.],
        [ 1.,  0., -1., nan,  2., -2.]])
 
 >>> imm = ItemMemoryModel(alpha=1.0, min_similarity=0.1)
-```
 
-Estimate similarity of item(0) to comparable items from observed ratings.
-Note, unlike the user-based model, the item-based model estimates similarity scores between items (columns).
-The element at 0-th index in the array is the 0-th item itself.
-
-```python
 >>> imm.fit(rating_matrix)
->>> imm.similarity(0).round(1)
-array([ 1. , -0.7, -1. , -1. ,  0.7, -0.9])
-```
 
-Predict rating of item(3) for user(3).
-
-```python
->>> imm.predict(3, 3)
+>>> imm.predict(user_id=3, item_id=3)
 -2.0
-```
 
-Predict top-3 rated items for user(3).
-
-```python
->>> imm.top_k_items(3, 3)
+>>> imm.top_k_items(user_id=3, k=3)
 [4, 0, 1]
 ```
 
@@ -134,16 +106,51 @@ array([[ 1.,  2.,  0., -1.,  1., -1.],
        [ 1.,  0., -1., -2.,  2., -2.]])
 ```
 
-Estimated similarity scores of items.
+Estimated `n x n` similarity score matrix of items.
 
 ```python
->>> imm.similarity_scores.round(1)
+>>> imm.sim_scores.round(1)
 array([[ 1. , -0.7, -1. , -1. ,  0.7, -0.9],
        [ nan,  1. , -0.4,  0. ,  0.2, -0.6],
        [ nan,  nan,  1. ,  0. , -1. ,  1. ],
        [ nan,  nan,  nan,  1. ,  0. ,  1. ],
        [ nan,  nan,  nan,  nan,  1. , -0.9],
        [ nan,  nan,  nan,  nan,  nan,  1. ]])
+```
+
+---
+
+### Latent factor model
+
+The neighborhood-based model supports a dimensionality reduction of the observed rating matrix with SVD and PCA compression methods for speeding up the fitting similarity matrix.
+Both compression methods provide more robust predictions with mean-centering the rating matrix across users' ratings (rows) and items' ratings (cols).
+The magnitude of compression can be tuned with a hyperparameter for better prediction results.
+
+```python
+>>> from recommenders.collaborative_filtering import UserMemoryModel
+
+>>> rating_matrix
+array([[nan,  2.,  0., nan,  1., -1.],
+       [-2., nan, nan,  0., nan,  1.],
+       [ 1., -1., nan, nan,  0., nan],
+       [ 1.,  0., -1., nan,  2., -2.]])
+
+>>> umm = UserMemoryModel(compression_method='pca',
+                          compression_rate=0.5)
+
+>>> umm.fit(rating_matrix)
+
+>>> umm.complete_rating_matrix().round(2)
+array([[-1.17,  2.  ,  0.  ,  0.83,  1.  , -1.  ],
+       [-2.  ,  1.17, -0.83,  0.  ,  0.17,  1.  ],
+       [ 1.  , -1.  , -1.  ,   nan,  0.  , -2.  ],
+       [ 1.  ,  0.  , -1.  ,   nan,  2.  , -2.  ]])
+
+>>> umm.sim_scores.round(2)
+array([[ 1.  ,  0.88, -0.94, -0.45],
+       [  nan,  1.  , -0.66, -0.82],
+       [  nan,   nan,  1.  ,  0.11],
+       [  nan,   nan,   nan,  1.  ]])
 ```
 
 ## Dependencies
