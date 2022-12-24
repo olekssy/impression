@@ -46,9 +46,10 @@ class GenericMemoryModel:
         # an alpha ≥ 1.0 exponent amplifies the weight of high sim scores
         self.alpha: float
 
-        # dimensionality reduction methods for observed ratings
-        self.valid_compression_methods: list[str]
-        self.compression_method: str
+        # matrix factorizarion methods for dimensionality reduction
+        self.valid_factorization_methods: list[str]
+        self.factorization_method: str
+        self.approximate_factorization: bool
 
         # the compression rate controls the rating matrix dimensionality
         # higher compression rate speed up fitting the sim score matrix
@@ -81,11 +82,11 @@ class UserMemoryModel(GenericMemoryModel):
         user-based neighborhood method. It provides an abstraction for solving
         a matrix completion problem and predicting the top-k items for a user.
 
-        The class supports a dimensionality reduction of the observed rating
-        matrix with SVD, PCA compression methods for speeding up fitting
-        similarity matrix. Both compression methods provide more robust
-        predictions with mean-centering the rating matrix across users' ratings
-        (rows) and items' ratings (cols).
+        The class supports a matrix factorization of the observed rating
+        matrix with SVD, PCA methods for speeding up fitting similarity matrix.
+        Both dimensionality reduction methods provide more robust predictions
+        with mean-centering the rating matrix across users' ratings (rows)
+        and items' ratings (cols).
 
     Hyperparameters:
         similarity_method (cosine, pearson, z-score): a method for fitting
@@ -93,8 +94,10 @@ class UserMemoryModel(GenericMemoryModel):
         min_similarity (≥0.1): minimum significant similarity score of a peer
             rating for prediction.
         alpha (≥1.0): an exponent amplifies the weight of high sim scores.
-        compression_method (none, svd, pca): a dimensionality reduction
+        factorization_method (none, svd, pca): a dimensionality reduction
             method for observed ratings.
+        approx_factorization (True, False): approximate matrix factorization
+            for truncated rating representation m x d, d = min(n_users, n_items)
         compression_rate (0 ≤ r < 1): controls the rating matrix dimensionality.
 
     Methods:
@@ -114,7 +117,8 @@ class UserMemoryModel(GenericMemoryModel):
                  similarity_method: str = 'pearson',
                  min_similarity: float = 0.1,
                  alpha: float = 1.0,
-                 compression_method: str = 'none',
+                 factorization_method: str = 'none',
+                 approximate_factorization: bool = False,
                  compression_rate: float = 0.0) -> None:
 
         # shared model attributes
@@ -135,12 +139,61 @@ class UserMemoryModel(GenericMemoryModel):
         self.sim_method = similarity_method
 
         # rating matrix dimensionality reduction method
-        self.valid_compression_methods = ['none', 'svd', 'pca']
-        if compression_method not in self.valid_compression_methods:
-            raise ValueError(
-                'Invalid compression method. Select from the following:',
-                self.valid_compression_methods)
-        self.compression_method: str = compression_method
+        self.valid_factorization_methods = ['svd', 'pca']
+        self.factorization_method: str = factorization_method
+        self.approximate_factorization = approximate_factorization
+
+    def _factorized(self, rating_matrix: np.ndarray, method: str,
+                    is_approximate: bool,
+                    compression_rate: float) -> np.ndarray:
+        """ Reduces rating matrix dimensionality with matrix factorization.
+
+        Args:
+            rating_matrix (np.ndarray): observed ratings matrix.
+            method (str): matrix factorization method: SVD, PCA.
+            approximate (bool): performs truncated SVD if True.
+            compression_rate (float): controls the rating matrix dimensionality.
+
+        Returns:
+            np.ndarray: m x d reduced representation of the rating matrix.
+                d = min(n_users, n_items) for base compression rate = 0.
+        """
+
+        if method not in self.valid_factorization_methods:
+            return rating_matrix
+
+        # mean-center observed ratings along rows, cols
+        mu = np.nanmean(rating_matrix, 1)
+        reduced_matrix = (rating_matrix - mu.reshape(self.n_users, 1))
+        reduced_matrix -= np.nanmean(reduced_matrix, 0)
+
+        # fill missing ratings with users mean
+        row_mean = np.nanmean(reduced_matrix, 1).reshape(self.n_users, 1)
+        reduced_matrix = np.where(np.isnan(reduced_matrix), row_mean,
+                                  reduced_matrix)
+
+        # mean-center along cols for PCA
+        if method == 'pca':
+            reduced_matrix -= np.mean(reduced_matrix, 0)
+
+        if is_approximate:
+            # get truncated m x d eigenvector matrix, d = min(n_users, n_items)
+            eigvecs, eigvals, _ = np.linalg.svd(reduced_matrix,
+                                                full_matrices=False)
+            # get reduced m x d representation of original rating matrix
+            n_dim = int(eigvals.size * (1.0 - compression_rate))
+            reduced_matrix = eigvecs @ np.diag(eigvals[:max(1, n_dim)])
+
+        else:
+            # get full n x n eigenvector matrix from (covariance) matrix n x n
+            eigvecs, eigvals, _ = np.linalg.svd(
+                reduced_matrix.T @ reduced_matrix)
+
+            # compressed m x d ratings representation with d-highest eigvals
+            n_dim = int(eigvals.size * (1.0 - compression_rate))
+            reduced_matrix = reduced_matrix @ eigvecs[:, :max(1, n_dim)]
+
+        return reduced_matrix
 
     def fit(self, observed_ratings: np.ndarray) -> None:
         """ Sets model attributes from observed ratings.
@@ -163,40 +216,21 @@ class UserMemoryModel(GenericMemoryModel):
         # edge-case: set near-zero sigma (denominator) to one
         self.sigma = np.where(self.sigma < self.min_denominator, 1, self.sigma)
 
-        comp_ratings = self.observed_ratings.copy()
-        if self.compression_method in ['svd', 'pca']:
-            # mean-center observed ratings along rows, cols
-            mu = np.nanmean(self.observed_ratings, 1)
-            comp_ratings = (self.observed_ratings - mu.reshape(self.n_users, 1))
-            comp_ratings -= np.nanmean(comp_ratings, 0)
+        # reduce dimensionality with matrix factorization
+        reduced_ratings = self._factorized(
+            rating_matrix=self.observed_ratings,
+            method=self.factorization_method,
+            is_approximate=self.approximate_factorization,
+            compression_rate=self.compression_rate)
 
-            # fill missing ratings with users mean
-            row_mean = np.nanmean(comp_ratings, 1).reshape(self.n_users, 1)
-            comp_ratings = np.where(np.isnan(comp_ratings), row_mean,
-                                    comp_ratings)
-
-            # mean-centered full rating matrix along cols
-            if self.compression_method == 'pca':
-                comp_ratings -= np.mean(comp_ratings, 0)
-
-            # estimate (covariance) matrix n x n
-            # get full n x n eigenvector matrix sorted by eigvals decs
-            vcm = comp_ratings.T @ comp_ratings / (self.n_items - 1)
-            eigvecs = np.linalg.svd(vcm)[0]  # returns full (u, d, u_T)
-
-            # compressed m x d ratings representation with d-highest eigvals
-            # the num of top-n features is capped by n_items
-            n_dim = int(self.n_items * (1.0 - self.compression_rate))
-            comp_ratings = comp_ratings @ eigvecs[:, :max(1, n_dim)]
-
-        # fit similarity matrix
-        comp_mu = np.nanmean(comp_ratings, 1)
-        comp_sigma = np.nanstd(comp_ratings, 1)
+        # fit similarity matrix to reduced rating matrix
+        mu = np.nanmean(reduced_ratings, 1)
+        sigma = np.nanstd(reduced_ratings, 1)
         # edge-case: set near-zero sigma (denominator) to one
-        comp_sigma = np.where(comp_sigma < self.min_denominator, 1, comp_sigma)
+        sigma = np.where(sigma < self.min_denominator, 1, sigma)
 
         for user_id in range(self.n_users):
-            self.similarity(user_id, comp_ratings, comp_mu, comp_sigma)
+            self.similarity(user_id, reduced_ratings, mu, sigma)
 
     def similarity(self, user_id: int, rating_matrix: np.ndarray,
                    mu: np.ndarray, sigma: np.ndarray) -> None:

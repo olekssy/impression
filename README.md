@@ -10,7 +10,7 @@ A library of recommender systems with collaborative, content-based filtering, an
 
 * [User-based memory model](#user-based-memory-model)
 * [Item-based memory model](#item-based-memory-model)
-* [Latent factor model](#latent-factor-model)
+* [Matrix factorization](#matrix-factorization)
 
 ## Collaborative filtering
 
@@ -120,9 +120,9 @@ array([[ 1. , -0.7, -1. , -1. ,  0.7, -0.9],
 
 ---
 
-### Latent factor model
+### Matrix factorization
 
-The neighborhood-based model supports a dimensionality reduction of the observed rating matrix with SVD and PCA compression methods for speeding up the fitting similarity matrix.
+The neighborhood-based model supports a dimensionality reduction of the observed rating matrix with SVD and PCA methods for speeding up the fitting similarity matrix.
 Both compression methods provide more robust predictions with mean-centering the rating matrix across users' ratings (rows) and items' ratings (cols).
 The magnitude of compression can be tuned with a hyperparameter for better prediction results.
 
@@ -135,7 +135,7 @@ array([[nan,  2.,  0., nan,  1., -1.],
        [ 1., -1., nan, nan,  0., nan],
        [ 1.,  0., -1., nan,  2., -2.]])
 
->>> umm = UserMemoryModel(compression_method='pca',
+>>> umm = UserMemoryModel(factorization_method='pca',
                           compression_rate=0.5)
 
 >>> umm.fit(rating_matrix)
@@ -153,6 +153,21 @@ array([[ 1.  ,  0.88, -0.94, -0.45],
        [  nan,   nan,   nan,  1.  ]])
 ```
 
+Both dimensionality reduction methods support _approximate_ matrix factorization, that limits dimensionality of the rating matrix representation to `m x d`, where `d = min(n_users, n_items)`.
+
+```python
+>>> umm = UserMemoryModel(factorization_method='svd',
+                          approximate_factorization=True)
+
+>>> umm.fit(rating_matrix)
+
+>>> umm.sim_scores.round(2)
+array([[ 1.  , -0.48, -0.53,  0.14],
+       [  nan,  1.  , -0.17, -0.9 ],
+       [  nan,   nan,  1.  ,  0.18],
+       [  nan,   nan,   nan,  1.  ]])
+```
+
 ## Dependencies
 
 Install environment and dependencies with `pipenv sync --dev`
@@ -162,4 +177,4 @@ Install environment and dependencies with `pipenv sync --dev`
 
 ## References
 
-* Aggarwal, C. C. (2016), Recommender Systems - The Textbook, Springer.
+Aggarwal, C. C. (2016), Recommender Systems - The Textbook, Springer.
