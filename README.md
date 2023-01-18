@@ -96,7 +96,7 @@ array([[nan,  2.,  0., nan,  1., -1.],
 
 Predict missing ratings for all users.
 The item-based model requires more observed items for solving a matrix completion problem, compared to the user-based model.
-Since the item-based model predicts the rating of a target item from the other rated items _by the same user_, it is believed to provide more personalized prediction, at a cost of required number of rated items by the target user.
+Since the item-based model predicts the rating of a target item from the other rated items _by the same user_, it is argued [ref.] to provide more personalized prediction, at a cost of a required number of rated items by the target user.
 
 ```python
 >>> imm.complete_rating_matrix()
@@ -153,7 +153,7 @@ array([[ 1.  ,  0.88, -0.94, -0.45],
        [  nan,   nan,   nan,  1.  ]])
 ```
 
-Both dimensionality reduction methods support _approximate_ matrix factorization, that limits dimensionality of the rating matrix representation to `m x d`, where `d = min(n_users, n_items)`.
+Both dimensionality reduction methods support _approximate_ matrix factorization, that limits dimensionality of the rating matrix representation to `m x d`, where `d = min(num_users, num_items)`.
 
 ```python
 >>> umm = UserMemoryModel(factorization_method='svd',

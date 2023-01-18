@@ -16,8 +16,8 @@ class GenericMemoryModel:
         self.observed_ratings: np.ndarray
 
         # number of users, items
-        self.n_users: int
-        self.n_items: int
+        self.num_users: int
+        self.num_items: int
 
         # m x n (mutable) matrix of predicted and observed ratings
         self.pred_ratings: np.ndarray
@@ -164,11 +164,11 @@ class UserMemoryModel(GenericMemoryModel):
 
         # mean-center observed ratings along rows, cols
         mu = np.nanmean(rating_matrix, 1)
-        reduced_matrix = (rating_matrix - mu.reshape(self.n_users, 1))
+        reduced_matrix = (rating_matrix - mu.reshape(self.num_users, 1))
         reduced_matrix -= np.nanmean(reduced_matrix, 0)
 
         # fill missing ratings with users mean
-        row_mean = np.nanmean(reduced_matrix, 1).reshape(self.n_users, 1)
+        row_mean = np.nanmean(reduced_matrix, 1).reshape(self.num_users, 1)
         reduced_matrix = np.where(np.isnan(reduced_matrix), row_mean,
                                   reduced_matrix)
 
@@ -205,10 +205,10 @@ class UserMemoryModel(GenericMemoryModel):
 
         # init model attributes
         self.observed_ratings = observed_ratings
-        self.n_users, self.n_items = self.observed_ratings.shape
+        self.num_users, self.num_items = self.observed_ratings.shape
         self.pred_ratings = self.observed_ratings.copy()
 
-        self.sim_scores = np.full((self.n_users, self.n_users), np.nan)
+        self.sim_scores = np.full((self.num_users, self.num_users), np.nan)
         np.fill_diagonal(self.sim_scores, 1.0)
 
         self.mu = np.nanmean(self.observed_ratings, 1)
@@ -229,7 +229,7 @@ class UserMemoryModel(GenericMemoryModel):
         # edge-case: set near-zero sigma (denominator) to one
         sigma = np.where(sigma < self.min_denominator, 1, sigma)
 
-        for user_id in range(self.n_users):
+        for user_id in range(self.num_users):
             self.similarity(user_id, reduced_ratings, mu, sigma)
 
     def similarity(self, user_id: int, rating_matrix: np.ndarray,
@@ -334,8 +334,8 @@ class UserMemoryModel(GenericMemoryModel):
     def complete_rating_matrix(self) -> np.ndarray:
         """ Predicts missing ratings for all users. """
 
-        for user_id in range(self.n_users):
-            for item_id in range(self.n_items):
+        for user_id in range(self.num_users):
+            for item_id in range(self.num_items):
                 self.predict(user_id, item_id)
 
         return self.pred_ratings
@@ -418,19 +418,20 @@ class ItemMemoryModel(GenericMemoryModel):
 
         # init model attributes
         self.observed_ratings = observed_ratings
-        self.n_users, self.n_items = self.observed_ratings.shape
+        self.num_users, self.num_items = self.observed_ratings.shape
         self.pred_ratings = self.observed_ratings.copy()
 
         self.mu = np.nanmean(self.observed_ratings, 1)
 
-        self.sim_scores = np.full((self.n_items, self.n_items), np.nan)
+        self.sim_scores = np.full((self.num_items, self.num_items), np.nan)
         np.fill_diagonal(self.sim_scores, 1.0)
 
         # mean-center observed ratings to remove user sentiment bias
-        rating_matrix = self.observed_ratings - self.mu.reshape(self.n_users, 1)
+        rating_matrix = self.observed_ratings - self.mu.reshape(
+            self.num_users, 1)
 
         # fit similarity score matrix
-        for item_id in range(self.n_items):
+        for item_id in range(self.num_items):
             self.similarity(item_id, rating_matrix)
 
     def similarity(self, item_id: int, rating_matrix: np.ndarray) -> np.ndarray:
@@ -518,8 +519,8 @@ class ItemMemoryModel(GenericMemoryModel):
     def complete_rating_matrix(self) -> np.ndarray:
         """ Predicts missing ratings for all users. """
 
-        for user_id in range(self.n_users):
-            for item_id in range(self.n_items):
+        for user_id in range(self.num_users):
+            for item_id in range(self.num_items):
                 self.predict(user_id, item_id)
 
         return self.pred_ratings
