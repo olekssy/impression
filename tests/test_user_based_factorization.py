@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from recommenders.collaborative_filtering import UserMemoryModel
+from impression.collaborative_filtering import UserMemoryModel
 
 
 @pytest.fixture

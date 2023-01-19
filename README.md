@@ -1,10 +1,10 @@
-# Recommender systems
+# Impression
 
-[![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/olekssy/recommender-primer)](Pipfile)
-[![GitHub](https://img.shields.io/github/license/olekssy/recommender-primer)](LICENSE)
-[![GitHub last commit](https://img.shields.io/github/last-commit/olekssy/recommender-primer)](https://github.com/olekssy/recommender-primer/commits/main)
+[![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/olekssy/impression)](Pipfile)
+[![GitHub](https://img.shields.io/github/license/olekssy/impression)](LICENSE)
+[![GitHub last commit](https://img.shields.io/github/last-commit/olekssy/impression)](https://github.com/olekssy/impression/commits/main)
 
-A library of recommender systems with collaborative, content-based filtering, and hybrid models.
+An open-source library for recommender systems with collaborative, content-based filtering, matrix factorization, and hybrid models.
 
 [Collaborative filtering](#collaborative-filtering)
 
